@@ -45,7 +45,8 @@ class ANN_neuron(nn.Module):
         
     def forward(self, input, win=15):
         batch_size = input.size(0)
-        output = torch.zeros(batch_size, win, self.out, device=device)
+        dev = input.device
+        output = torch.zeros(batch_size, win, self.out, device=dev)
         for step in range(win):
             x = input[:, step,...].view(batch_size, -1)
             x = self.fc(x)

@@ -7,12 +7,12 @@ import pylab as pl
 seed_dict = [0,1,2,3,4,5,6,7,8,9,10]
 need_4lif = True
 length = 40000
-total_reward_dict = {"LIF":[], "HH":[], "LIF_HH":[], "4LIF":[],"ANN":[]}
-mean_reward_dict = {"LIF":[], "HH":[], "LIF_HH":[], "4LIF":[],"ANN":[]}
-std_reward_dict = {"LIF":[], "HH":[], "LIF_HH":[], "4LIF":[],"ANN":[]}
-label_dict = {"LIF":"s-LIF", "HH":"HH", "LIF_HH":"s-LIF2HH", "4LIF":"4s-LIF","ANN":"ANN"}
+total_reward_dict = {"LIF":[], "HH":[], "LIF_HH":[], "LIF_1_3":[], "LIF_2_2":[], "LIF_1_2_1":[], "LIF_1_1_1_1":[], "LIF_ring":[], "4LIF":[],"ANN":[]}
+mean_reward_dict = {"LIF":[], "HH":[], "LIF_HH":[], "LIF_1_3":[], "LIF_2_2":[], "LIF_1_2_1":[], "LIF_1_1_1_1":[], "LIF_ring":[], "4LIF":[],"ANN":[]}
+std_reward_dict = {"LIF":[], "HH":[], "LIF_HH":[], "LIF_1_3":[], "LIF_2_2":[], "LIF_1_2_1":[], "LIF_1_1_1_1":[], "LIF_ring":[], "4LIF":[],"ANN":[]}
+label_dict = {"LIF":"s-LIF", "HH":"HH", "LIF_HH":"s-LIF2HH", "LIF_1_3":"1+3 LIF", "LIF_2_2":"2+2 LIF", "LIF_1_2_1":"1+2+1 LIF", "LIF_1_1_1_1":"1+1+1+1 LIF", "LIF_ring":"LIF ring","4LIF":"4s-LIF","ANN":"ANN"}
 for seed in seed_dict:
-    for model_name in ["LIF","HH","LIF_HH","4LIF","ANN"]:
+    for model_name in ["LIF","HH","LIF_HH","LIF_1_3","LIF_2_2","LIF_1_2_1","LIF_1_1_1_1","LIF_ring","4LIF","ANN"]:
         if model_name == "4LIF" and not need_4lif:
             continue
         data = np.load("./record/{}/reward_iteration_{}.npy".format(model_name, seed), allow_pickle=True)
@@ -26,7 +26,7 @@ for seed in seed_dict:
         total_reward_dict[model_name].append(avg_reward_dict[0:length])
         #plt.plot(iter, avg_reward_dict[0:iteration-n])
         
-for model_name in ["LIF","HH","LIF_HH","4LIF","ANN"]:
+for model_name in ["LIF","HH","LIF_HH","LIF_1_3","LIF_2_2","LIF_1_2_1","LIF_1_1_1_1","LIF_ring","4LIF","ANN"]:
     if(model_name == "4LIF" and not need_4lif):
         continue
     std_reward_dict[model_name] = np.std(total_reward_dict[model_name], axis=0)
@@ -34,8 +34,8 @@ for model_name in ["LIF","HH","LIF_HH","4LIF","ANN"]:
 
 iter = np.linspace(start=1, stop=length, num=length)
 color_number = 0
-color_dict = [[30,30,230],[220,180,30],[255,20,0],[80,180,100],[255,150,80]]
-for model_name in ["LIF","HH","LIF_HH","4LIF","ANN"]:
+color_dict = [[30,30,230],[220,180,30],[255,20,0],[150,80,200],[100,200,255],[255,100,200],[0,180,180],[180,100,255],[80,180,100],[255,150,80]]
+for model_name in ["LIF","HH","LIF_HH","LIF_1_3","LIF_2_2","LIF_1_2_1","LIF_1_1_1_1","LIF_ring","4LIF","ANN"]:
     if(model_name == "4LIF" and not need_4lif):
         continue
     r,g,b = np.array(color_dict[color_number])/255

@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
-from scipy.integrate import odeint
 from torch.distributions import Normal
 
 v_min, v_max = -1e3, 1e3
@@ -15,7 +14,7 @@ LOG_SIG_MIN = -20
 epsilon = 1e-6
 
 class ActFun(torch.autograd.Function):
-    
+
     @staticmethod
     def forward(ctx, input):
         ctx.save_for_backward(input)
@@ -32,60 +31,71 @@ act_fun = ActFun.apply
 
 def mem_update(x, mem, spike):
     mem1 = mem * decay * (1. - spike) + x
-    spike1 = act_fun(mem1) # act_fun : approximation firing function
+    spike1 = act_fun(mem1)
     return mem1, spike1
-
-cfg_fc = [16, 16, 16, 2]
 
 def weights_init_(m):
     if isinstance(m, nn.Linear):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
         torch.nn.init.constant_(m.bias, 0)
 
-class LIF_hh_neuron(nn.Module):
-    
+class LIF_1_3_neuron(nn.Module):
+    """
+    1+3 LIF topology (alternative to LIF_HH's 3+1):
+        - Stage 1: 1 LIF processes the raw input (slot 0)
+        - Stage 2: 3 parallel LIFs each receive the stage-1 spike
+                    as their input current (slots 1, 2, 3)
+
+    Total: 4 LIFs, same as LIF_HH, but with a strict two-stage
+    information flow rather than 3-parallel + 1-residual.
+    """
     def __init__(self, in_planes, out_planes):
-        super(LIF_hh_neuron, self).__init__()
-
-        self.fc1 = nn.Linear(in_planes,out_planes)
-        self.fc2 = nn.Linear(in_planes,out_planes)
-        self.fc3 = nn.Linear(in_planes,out_planes)
-        self.lif_fc = nn.Linear(3,1)
+        super(LIF_1_3_neuron, self).__init__()
         self.channel = out_planes
-        self.thresh = thresh
-
-    def update_neuron(self,input,mem,spike):
-        input_all = torch.zeros_like(mem)
-        input_all[:,:,0] = self.fc1(input)
-        input_all[:,:,1] = self.fc2(input)
-        input_all[:,:,2] = self.fc3(input)
-        inner_input = self.lif_fc(mem[:,:,0:3])
-        input_all[:,:,3] = inner_input[:,:,0]
-        mem1 = torch.zeros_like(mem,device=mem.device)
-        spike_out = torch.zeros_like(spike,device=spike.device)
-        mem1,spike_out = mem_update(input_all,mem,spike)
-        return mem1, spike_out
+        self.fc_in = nn.Linear(in_planes, out_planes)
+        self.fc_a = nn.Linear(out_planes, out_planes)
+        self.fc_b = nn.Linear(out_planes, out_planes)
+        self.fc_c = nn.Linear(out_planes, out_planes)
 
     def forward(self, input, wins=15):
-
         batch_size = input.size(0)
         dev = input.device
 
+        # mem, spike: [batch, channel, 4]
         mem = torch.zeros([batch_size, self.channel, 4], device=dev)
         spike = torch.zeros([batch_size, self.channel, 4], device=dev)
         spikes = torch.zeros([batch_size, wins, self.channel, 4], device=dev)
-    
+
         for step in range(wins):
-            mem, spike = self.update_neuron(input[:,step,...], mem, spike)
-            spikes[:,step,...] = spike
-        spikes = spikes.view(batch_size,wins,-1)
+            x = input[:, step, ...]
+
+            # ---- Stage 1: 1 LIF from the raw input ----
+            in0 = self.fc_in(x)
+            mem0, spike0 = mem_update(in0, mem[:,:,0], spike[:,:,0])
+
+            # ---- Stage 2: 3 LIFs from the stage-1 spike ----
+            in_a = self.fc_a(spike0)
+            in_b = self.fc_b(spike0)
+            in_c = self.fc_c(spike0)
+            mem_a, spike_a = mem_update(in_a, mem[:,:,1], spike[:,:,1])
+            mem_b, spike_b = mem_update(in_b, mem[:,:,2], spike[:,:,2])
+            mem_c, spike_c = mem_update(in_c, mem[:,:,3], spike[:,:,3])
+
+            # Out-of-place stack to keep autograd happy
+            mem = torch.stack([mem0, mem_a, mem_b, mem_c], dim=-1)
+            spike = torch.stack([spike0, spike_a, spike_b, spike_c], dim=-1)
+
+            spikes[:, step, ...] = spike
+
+        spikes = spikes.view(batch_size, wins, -1)
         return spikes
+
 
 class GaussianPolicy(nn.Module):
     def __init__(self, num_inputs, num_actions, hidden_dim, action_space=None):
         super(GaussianPolicy, self).__init__()
-        
-        self.lif_hh_layer = LIF_hh_neuron(num_inputs, hidden_dim)
+
+        self.lif_1_3_layer = LIF_1_3_neuron(num_inputs, hidden_dim)
         self.linear1_1 = nn.Linear(4*hidden_dim, hidden_dim)
         self.linear1_2 = nn.Linear(hidden_dim, hidden_dim)
         self.linear2_1 = nn.Linear(4*hidden_dim, hidden_dim)
@@ -110,8 +120,8 @@ class GaussianPolicy(nn.Module):
         input_tmp = []
         for i in range(5):
             input_tmp += [state[:,i,...]]*3
-        state = torch.stack(input_tmp,dim=1) 
-        x = self.lif_hh_layer(state)
+        state = torch.stack(input_tmp, dim=1)
+        x = self.lif_1_3_layer(state)
         x = torch.mean(x, dim=1)
         x1 = self.linear1_1(x)
         x1 = nn.ReLU()(x1)

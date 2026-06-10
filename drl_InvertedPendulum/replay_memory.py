@@ -19,8 +19,19 @@ class ReplayMemory:
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
-        state, action, reward, next_state, done = map(np.stack, zip(*batch))
+        state, action, reward, next_state, done = zip(*batch)
+        state     = np.stack([self._to_numpy(x) for x in state])
+        action    = np.stack([self._to_numpy(x) for x in action])
+        reward    = np.stack([self._to_numpy(x) for x in reward])
+        next_state= np.stack([self._to_numpy(x) for x in next_state])
+        done      = np.stack([self._to_numpy(x) for x in done])
         return state, action, reward, next_state, done
+    
+    @staticmethod
+    def _to_numpy(x):
+        if isinstance(x, torch.Tensor):
+            return x.detach().cpu().numpy()
+        return np.asarray(x)
 
     def __len__(self):
         return len(self.buffer)

@@ -1,6 +1,7 @@
 import argparse
 import datetime
-import gym
+# import gym
+import gymnasium as gym
 import numpy as np
 import itertools
 import torch
@@ -10,6 +11,7 @@ from sac import SAC
 from matplotlib import animation
 import matplotlib.pyplot as plt
 from replay_memory import ReplayMemory
+import os
 
 parser = argparse.ArgumentParser(description='PyTorch Soft Actor-Critic Args')
 parser.add_argument('--env-name', default="InvertedPendulum-v4",
@@ -48,14 +50,26 @@ parser.add_argument('--replay_size', type=int, default=1000000, metavar='N',
 parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
 parser.add_argument('--model_name', default="LIF_HH",
-                    help='choose model (choice: LIF, HH, LIF_HH, 4LIF, ANN)')
+                    help='choose model (choice: LIF, HH, LIF_HH, LIF_1_3, LIF_2_2, LIF_1_2_1, LIF_1_1_1_1, 4LIF, ANN)')
 args = parser.parse_args()
+
+# 兼容新旧 gym / gymnasium
+def env_reset(env):
+    out = env.reset(seed=args.seed)
+    return out[0] if isinstance(out, tuple) else out
+
+def env_step(env, action):
+    out = env.step(action)
+    if len(out) == 5:
+        obs, reward, terminated, truncated, _ = out
+        return obs, reward, terminated or truncated
+    return out
 
 def train(args):
     # Environment
     env = []
     env = gym.make(args.env_name)
-    env.seed(args.seed)
+    # env.seed(args.seed)
     env.action_space.seed(args.seed)
 
     torch.manual_seed(args.seed)
@@ -74,6 +88,14 @@ def train(args):
         from models.model_hh import GaussianPolicy
     elif(args.model_name == "LIF_HH"):
         from models.model_lif_hh import GaussianPolicy
+    elif(args.model_name == "LIF_1_3"):
+        from models.model_lif_1_3 import GaussianPolicy
+    elif(args.model_name == "LIF_2_2"):
+        from models.model_lif_2_2 import GaussianPolicy
+    elif(args.model_name == "LIF_1_2_1"):
+        from models.model_lif_1_2_1 import GaussianPolicy
+    elif(args.model_name == "LIF_1_1_1_1"):
+        from models.model_lif_1_1_1_1 import GaussianPolicy
     elif(args.model_name == "4LIF"):
         from models.model_lif import GaussianPolicy
         args.hidden_size = 512
@@ -105,7 +127,7 @@ def train(args):
         episode_reward = 0
         episode_steps = 0
         done = False
-        state = env.reset()
+        state = env_reset(env)
         state_dict = []
         action_dict = []
         reward_dict = []
@@ -133,7 +155,7 @@ def train(args):
 
                     updates += 1
 
-            next_state, reward, done, _ = env.step(action) # Step
+            next_state, reward, done = env_step(env, action) # Step
             x, x_dot, theta, theta_dot = next_state
             # r1 = (env.x_threshold - abs(x)) / env.x_threshold - 0.8  # x_threshold 4.8
             # r2 = (env.theta_threshold_radians - abs(theta)) / env.theta_threshold_radians - 0.5
@@ -162,10 +184,10 @@ def train(args):
             mask = 1 if episode_steps == env._max_episode_steps else float(not done)
             
             state_dict.append(torch.FloatTensor(state))
-            action_dict.append(torch.tensor(action))
-            reward_dict.append(torch.tensor(reward).view(1,-1))
-            next_state_dict.append(torch.tensor(next_state))
-            mask_dict.append(torch.tensor(mask).view(1,-1))
+            action_dict.append(torch.tensor(action, dtype=torch.float32))
+            reward_dict.append(torch.tensor(reward, dtype=torch.float32).view(1,-1))
+            next_state_dict.append(torch.tensor(next_state, dtype=torch.float32))
+            mask_dict.append(torch.tensor(mask, dtype=torch.float32).view(1,-1))
             
             steps = len(state_dict)
             if(steps < wins):
@@ -190,7 +212,9 @@ def train(args):
                 break
 
         if total_numsteps >= args.num_steps:
-            np.save("./record/{}/reward_iteration_{}.npy".format(args.model_name,args.seed),
+            output_dir = "./record/{}".format(args.model_name)
+            os.makedirs(output_dir, exist_ok=True)
+            np.save("{}/reward_iteration_{}.npy".format(output_dir, args.seed),
                     {"reward_dict":np.array(reward_dict_iteration),
                     "iteration":np.array(total_numsteps)})
             break
@@ -202,7 +226,7 @@ def train(args):
             avg_step = 0.
             episodes = 10
             for _  in range(episodes):
-                state = env.reset()
+                state = env_reset(env)
                 episode_reward = 0
                 episode_step = 0
                 done = False
@@ -219,7 +243,7 @@ def train(args):
                         for i in range(wins):
                             state_tmp[i,:,...] = state_dict_test[steps-wins+i]
                         action = agent.select_action(state_tmp, evaluate=True)  # Sample action from policy
-                    next_state, reward, done, _ = env.step(action)
+                    next_state, reward, done = env_step(env, action)
                     
                     episode_reward += reward
                     episode_step += 1

@@ -23,6 +23,16 @@ from models.fourLIF_conv import SCNN_Model_4LIF
 from models.fourLIF_fc import SNN_Model_4LIF
 from models.ann import ANN_Model
 from models.cnn import CNN_Model
+from models.LIF_1_3_fc import SNN_Model_LIF_1_3
+from models.LIF_2_2_fc import SNN_Model_LIF_2_2
+from models.LIF_1_2_1_fc import SNN_Model_LIF_1_2_1
+from models.LIF_1_1_1_1_fc import SNN_Model_LIF_1_1_1_1
+from models.LIF_2_2_conv import SCNN_Model_LIF_2_2
+from models.LIF_1_2_1_conv import SCNN_Model_LIF_1_2_1
+from models.LIF_1_1_1_1_conv import SCNN_Model_LIF_1_1_1_1
+from models.LIF_ring_fc import SNN_Model_LIF_ring
+from models.LIF_ring_conv import SCNN_Model_LIF_ring
+from models.LIF_1_3_fc import SNN_Model_LIF_1_3
 
 device = torch.device("cuda:0")
 data_path = '/data'
@@ -167,12 +177,53 @@ def main(args):
         model = SCNN_Model_4LIF(n_tasks)   
         model.to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=3e-3, weight_decay = 3e-4)
+    elif model_name == "LIF_1_3_fc":
+        model = SNN_Model_LIF_1_3(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.1)
+    elif model_name == "LIF_2_2_fc":
+        model = SNN_Model_LIF_2_2(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.1)
+    elif model_name == "LIF_1_2_1_fc":
+        model = SNN_Model_LIF_1_2_1(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.1)
+    elif model_name == "LIF_1_1_1_1_fc":
+        model = SNN_Model_LIF_1_1_1_1(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.1)
+    elif model_name == "LIF_ring_fc":
+        model = SNN_Model_LIF_ring(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 20, 30], gamma=0.1)
     elif model_name == "HH_conv":
-        model = SCNN_Model_HH(n_tasks)   
+        model = SCNN_Model_HH(n_tasks)
         model.to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=3e-3, weight_decay = 3e-4)
     elif model_name == "LIF_hh_conv":
         model = SCNN_Model_LIF_hh(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=3e-3, weight_decay = 3e-4)
+    elif model_name == "LIF_2_2_conv":
+        model = SCNN_Model_LIF_2_2(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=3e-3, weight_decay = 3e-4)
+    elif model_name == "LIF_1_2_1_conv":
+        model = SCNN_Model_LIF_1_2_1(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=3e-3, weight_decay = 3e-4)
+    elif model_name == "LIF_1_1_1_1_conv":
+        model = SCNN_Model_LIF_1_1_1_1(n_tasks)
+        model.to(device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=3e-3, weight_decay = 3e-4)
+    elif model_name == "LIF_ring_conv":
+        model = SCNN_Model_LIF_ring(n_tasks)
         model.to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=3e-3, weight_decay = 3e-4)
     elif model_name == "CNN":

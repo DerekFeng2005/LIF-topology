@@ -54,8 +54,9 @@ class LIF_neuron(nn.Module):
 
     def forward(self, input, win=15):
         batch_size = input.size(0)
-        spikes = torch.zeros(batch_size, win, self.out, device=device)
-        h1_mem = h1_spike = h1_sumspike = torch.zeros(batch_size, self.out, device=device)
+        dev = input.device
+        spikes = torch.zeros(batch_size, win, self.out, device=dev)
+        h1_mem = h1_spike = h1_sumspike = torch.zeros(batch_size, self.out, device=dev)
         for step in range(win):
             x = input[:, step,...].view(batch_size, -1)
             h1_mem, h1_spike = self.mem_update(self.fc, x, h1_mem, h1_spike)
@@ -87,11 +88,12 @@ class QNetwork(nn.Module):
     def forward(self, state, action, wins=15):
         inputs = torch.cat([state, action], 2)
         batch_size = inputs.size(0)
+        dev = inputs.device
 
-        h1_mem = h1_spike = torch.zeros(batch_size, self.hidden_dim, device=device)
-        h1_sumspike = torch.zeros(batch_size, self.hidden_dim, device=device)
-        h2_mem = h2_spike = torch.zeros(batch_size, self.hidden_dim, device=device)
-        h2_sumspike = torch.zeros(batch_size, self.hidden_dim, device=device)
+        h1_mem = h1_spike = torch.zeros(batch_size, self.hidden_dim, device=dev)
+        h1_sumspike = torch.zeros(batch_size, self.hidden_dim, device=dev)
+        h2_mem = h2_spike = torch.zeros(batch_size, self.hidden_dim, device=dev)
+        h2_sumspike = torch.zeros(batch_size, self.hidden_dim, device=dev)
 
         for step in range(wins):
             x = inputs[:,step,...].view(batch_size, -1)
