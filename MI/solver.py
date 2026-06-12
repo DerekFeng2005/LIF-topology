@@ -66,10 +66,10 @@ class Solver(object):
         # Dataset
         with open('datasets/data/multi_fashion_and_mnist.pickle','rb') as f:
             trainX, trainLabel,testX, testLabel = pickle.load(f) 
-        trainX = torch.from_numpy(trainX.reshape(120000,1,36,36)).float()
-        trainLabel = torch.from_numpy(trainLabel).long()
-        testX = torch.from_numpy(testX.reshape(20000,1,36,36)).float()
-        testLabel = torch.from_numpy(testLabel).long()
+        trainX = torch.tensor(trainX.reshape(120000,1,36,36), dtype=torch.float32)
+        trainLabel = torch.tensor(trainLabel, dtype=torch.long)
+        testX = torch.tensor(testX.reshape(20000,1,36,36), dtype=torch.float32)
+        testLabel = torch.tensor(testLabel, dtype=torch.long)
         train_set = torch.utils.data.TensorDataset(trainX, trainLabel)
         test_set  = torch.utils.data.TensorDataset(testX, testLabel)
 

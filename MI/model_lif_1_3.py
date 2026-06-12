@@ -40,20 +40,14 @@ class LIF_1_3_neuron(nn.Module):
     """
     1+3 LIF topology (mem-mixing, LIF_hh style).
 
-    Slot layout: [batch, channel, 4]
+    Slot layout: [batch, channel, 4] (or [T, batch, channel, 4])
         slot 0 -> primary LIF (processes input)
         slots 1, 2, 3 -> mixing LIFs, each receives a learned non-negative
                           scalar of mem[:,:,0:1] via lif_fc = nn.Linear(1, 3)
-
-    Mirrors LIF_hh's "1 residual follower" design but for a 1+3 layout
-    (the 1 primary here is at slot 0, opposite to LIF_hh where the
-    3 primaries are at slots 0,1,2 and the follower is at slot 3).
     """
     def __init__(self, in_planes, out_planes):
         super(LIF_1_3_neuron, self).__init__()
-        # 1 primary LIF
         self.fc1 = nn.Linear(in_planes, out_planes)
-        # 1 mixing layer producing 3 input currents (one per mixing LIF)
         self.lif_fc = nn.Linear(1, 3).to(device)
         self.lif_fc.weight.data = abs(self.lif_fc.weight.data)
         self.channel = out_planes
@@ -61,25 +55,43 @@ class LIF_1_3_neuron(nn.Module):
         self.apply(weights_init_)
 
     def update_neuron(self, input, mem, spike):
-        input_all = torch.zeros_like(mem)
-        # Stage 1: primary, sees input
-        input_all[:, :, 0] = self.fc1(input)
-        # Stage 2: 3 mixing LIFs, see OLD mem[:,:,0] via lif_fc
-        inner = self.lif_fc(mem[:, :, 0:1])
-        input_all[:, :, 1] = inner[:, :, 0]
-        input_all[:, :, 2] = inner[:, :, 1]
-        input_all[:, :, 3] = inner[:, :, 2]
-        mem1, spike1 = mem_update(input_all, mem, spike)
-        return mem1, spike1
+        if input.dim() == 2:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, 0] = self.fc1(input)
+            inner = self.lif_fc(mem[:, :, 0:1])
+            input_all[:, :, 1] = inner[:, :, 0]
+            input_all[:, :, 2] = inner[:, :, 1]
+            input_all[:, :, 3] = inner[:, :, 2]
+        else:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, :, 0] = self.fc1(input)
+            inner = self.lif_fc(mem[:, :, :, 0:1])
+            input_all[:, :, :, 1] = inner[:, :, :, 0]
+            input_all[:, :, :, 2] = inner[:, :, :, 1]
+            input_all[:, :, :, 3] = inner[:, :, :, 2]
+        mem1 = torch.zeros_like(mem, device=device)
+        spike_out = torch.zeros_like(spike, device=device)
+        mem1, spike_out = mem_update(input_all, mem, spike)
+        return mem1, spike_out
 
     def forward(self, input, wins=15):
         input = input.float().to(device)
-        batch_size = input.size(0)
-        mem = torch.zeros([batch_size, self.channel, 4], device=device)
-        spike = torch.zeros([batch_size, self.channel, 4], device=device)
-        spikes = torch.zeros([batch_size, wins, self.channel, 4], device=device)
-        for step in range(wins):
-            mem, spike = self.update_neuron(input, mem, spike)
-            spikes[:, step, ...] = spike
-        spikes = spikes.view(batch_size, wins, -1)
+        if input.dim() == 2:
+            batch_size = input.size(0)
+            mem = torch.zeros([batch_size, self.channel, 4]).to(device)
+            spike = torch.zeros([batch_size, self.channel, 4]).to(device)
+            spikes = torch.zeros([batch_size, wins, self.channel, 4]).to(device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, step, ...] = spike
+            spikes = spikes.view(batch_size, wins, -1)
+        else:
+            batch_size = input.size(1)
+            mem = torch.zeros([input.size(0), batch_size, self.channel, 4]).to(device)
+            spike = torch.zeros([input.size(0), batch_size, self.channel, 4]).to(device)
+            spikes = torch.zeros([input.size(0), batch_size, wins, self.channel, 4]).to(device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, :, step, ...] = spike
+            spikes = spikes.view(input.size(0), batch_size, wins, -1)
         return spikes

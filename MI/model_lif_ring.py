@@ -54,26 +54,42 @@ class LIF_ring_neuron(nn.Module):
         self.thresh = thresh
         self.apply(weights_init_)
 
+    def update_neuron(self, input, mem, spike):
+        if input.dim() == 2:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, 0] = self.fc_0(input) + mem[:, :, 3]
+            input_all[:, :, 1] = self.fc_1(input) + mem[:, :, 0]
+            input_all[:, :, 2] = self.fc_2(input) + mem[:, :, 1]
+            input_all[:, :, 3] = self.fc_3(input) + mem[:, :, 2]
+        else:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, :, 0] = self.fc_0(input) + mem[:, :, :, 3]
+            input_all[:, :, :, 1] = self.fc_1(input) + mem[:, :, :, 0]
+            input_all[:, :, :, 2] = self.fc_2(input) + mem[:, :, :, 1]
+            input_all[:, :, :, 3] = self.fc_3(input) + mem[:, :, :, 2]
+        mem1 = torch.zeros_like(mem, device=device)
+        spike_out = torch.zeros_like(spike, device=device)
+        mem1, spike_out = mem_update(input_all, mem, spike)
+        return mem1, spike_out
+
     def forward(self, input, wins=15):
         input = input.float().to(device)
-        batch_size = input.size(0)
-        mem = torch.zeros([batch_size, self.channel, 4], device=device)
-        spike = torch.zeros([batch_size, self.channel, 4], device=device)
-        spikes = torch.zeros([batch_size, wins, self.channel, 4], device=device)
-        for step in range(wins):
-            in_0 = self.fc_0(input) + mem[:, :, 3]
-            in_1 = self.fc_1(input) + mem[:, :, 0]
-            in_2 = self.fc_2(input) + mem[:, :, 1]
-            in_3 = self.fc_3(input) + mem[:, :, 2]
-
-            new_mem = torch.zeros_like(mem)
-            new_spike = torch.zeros_like(spike)
-            new_mem[:, :, 0], new_spike[:, :, 0] = mem_update(in_0, mem[:, :, 0], spike[:, :, 0])
-            new_mem[:, :, 1], new_spike[:, :, 1] = mem_update(in_1, mem[:, :, 1], spike[:, :, 1])
-            new_mem[:, :, 2], new_spike[:, :, 2] = mem_update(in_2, mem[:, :, 2], spike[:, :, 2])
-            new_mem[:, :, 3], new_spike[:, :, 3] = mem_update(in_3, mem[:, :, 3], spike[:, :, 3])
-            mem = new_mem
-            spike = new_spike
-            spikes[:, step, ...] = spike
-        spikes = spikes.view(batch_size, wins, -1)
+        if input.dim() == 2:
+            batch_size = input.size(0)
+            mem = torch.zeros([batch_size, self.channel, 4]).to(device)
+            spike = torch.zeros([batch_size, self.channel, 4]).to(device)
+            spikes = torch.zeros([batch_size, wins, self.channel, 4]).to(device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, step, ...] = spike
+            spikes = spikes.view(batch_size, wins, -1)
+        else:
+            batch_size = input.size(1)
+            mem = torch.zeros([input.size(0), batch_size, self.channel, 4]).to(device)
+            spike = torch.zeros([input.size(0), batch_size, self.channel, 4]).to(device)
+            spikes = torch.zeros([input.size(0), batch_size, wins, self.channel, 4]).to(device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, :, step, ...] = spike
+            spikes = spikes.view(input.size(0), batch_size, wins, -1)
         return spikes

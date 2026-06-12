@@ -55,9 +55,9 @@ if __name__ == "__main__":
     IZX_dict = []
     IZY_dict = []
     for i in range(1):
-        seed = i+1
-        args.seed = seed
-        print("seed:",seed)
+        # seed = i+1
+        # args.seed = seed
+        # print("seed:",seed)
         izy,izx = main(args)
         IZX_dict.append(izx)
         IZY_dict.append(izy)

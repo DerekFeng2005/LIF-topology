@@ -22,25 +22,30 @@ class ToyNet(nn.Module):
     def __init__(self, K=256, model="LIF"):
         super(ToyNet, self).__init__()
         self.K = K
-        self.model = model
-        if model == "LIF":
+        # Normalize so `--model LIF_hh` and `--model LIF_HH` both work.
+        self.model = model.upper()
+        if self.model == "LIF":
             self.neuron = LIF_neuron(1296,512)
-        elif model == "HH":
+        elif self.model == "HH":
             self.neuron = HH_neuron(1296,512)
-        elif model == "LIF_HH":
+        elif self.model == "LIF_HH":
             self.neuron = LIF_hh_neuron(1296,512)
-        elif model == "LIF_1_3":
+        elif self.model == "LIF_1_3":
             self.neuron = LIF_1_3_neuron(1296,512)
-        elif model == "LIF_2_2":
+        elif self.model == "LIF_2_2":
             self.neuron = LIF_2_2_neuron(1296,512)
-        elif model == "LIF_1_2_1":
+        elif self.model == "LIF_1_2_1":
             self.neuron = LIF_1_2_1_neuron(1296,512)
-        elif model == "LIF_1_1_1_1":
+        elif self.model == "LIF_1_1_1_1":
             self.neuron = LIF_1_1_1_1_neuron(1296,512)
-        elif model == "LIF_ring":
+        elif self.model == "LIF_RING":
             self.neuron = LIF_ring_neuron(1296,512)
+        else:
+            raise ValueError(
+                "Unknown model: {!r}. Choose from: LIF, HH, LIF_HH, "
+                "LIF_1_3, LIF_2_2, LIF_1_2_1, LIF_1_1_1_1, LIF_RING".format(model))
 
-        if model in ("LIF", "HH"):
+        if self.model in ("LIF", "HH"):
             self.encode = nn.Sequential(
                 self.neuron,
                 nn.Linear(512, 2*self.K))
