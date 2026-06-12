@@ -41,58 +41,68 @@ def weights_init_(m):
 
 class LIF_1_2_1_neuron(nn.Module):
     """
-    1+2+1 LIF topology:
-        - Stage 1: 1 LIF processes the raw input (slot 0)
-        - Stage 2: 2 parallel LIFs each receive spike0 (slots 1, 2)
-        - Stage 3: 1 LIF receives (spike_a + spike_b) (slot 3)
+    1+2+1 LIF topology (mem-mixing, LIF_hh style).
 
-    Total: 4 LIFs, 3 stages. Stage-1 has 1 LIF (same as LIF_1_3) and
-    stage-3 has 1 LIF, so two bottleneck points. Adds one extra layer
-    of depth vs LIF_1_3.
+    Slot layout: [batch, channel, 4] (or [T, batch, channel, 4])
+        slot 0     -> 1 primary LIF (processes input)
+        slots 1, 2 -> 2 stage-2 mixing LIFs, see OLD mem[:,:,0] via
+                      lif_fc1 = nn.Linear(1, 2) (non-negative)
+        slot 3     -> 1 stage-3 mixing LIF, sees OLD (mem[:,:,1], mem[:,:,2])
+                      via lif_fc2 = nn.Linear(2, 1) (non-negative)
     """
     def __init__(self, in_planes, out_planes):
         super(LIF_1_2_1_neuron, self).__init__()
+        self.fc1 = nn.Linear(in_planes, out_planes)
+        self.lif_fc1 = nn.Linear(1, 2)
+        self.lif_fc1.weight.data = abs(self.lif_fc1.weight.data)
+        self.lif_fc2 = nn.Linear(2, 1)
+        self.lif_fc2.weight.data = abs(self.lif_fc2.weight.data)
         self.channel = out_planes
-        # Stage 1: 1 LIF, projects raw input -> hidden
-        self.fc_in = nn.Linear(in_planes, out_planes)
-        # Stage 2: 2 parallel LIFs from spike0
-        self.fc_a = nn.Linear(out_planes, out_planes)
-        self.fc_b = nn.Linear(out_planes, out_planes)
-        # Stage 3: 1 LIF from (spike_a + spike_b)
-        self.fc_c = nn.Linear(out_planes, out_planes)
+        self.thresh = thresh
+        self.apply(weights_init_)
+
+    def update_neuron(self, input, mem, spike):
+        if input.dim() == 2:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, 0] = self.fc1(input)
+            inner1 = self.lif_fc1(mem[:, :, 0:1])
+            input_all[:, :, 1] = inner1[:, :, 0]
+            input_all[:, :, 2] = inner1[:, :, 1]
+            inner2 = self.lif_fc2(mem[:, :, 1:3])
+            input_all[:, :, 3] = inner2[:, :, 0]
+        else:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, :, 0] = self.fc1(input)
+            inner1 = self.lif_fc1(mem[:, :, :, 0:1])
+            input_all[:, :, :, 1] = inner1[:, :, :, 0]
+            input_all[:, :, :, 2] = inner1[:, :, :, 1]
+            inner2 = self.lif_fc2(mem[:, :, :, 1:3])
+            input_all[:, :, :, 3] = inner2[:, :, :, 0]
+        mem1 = torch.zeros_like(mem)
+        spike_out = torch.zeros_like(spike)
+        mem1, spike_out = mem_update(input_all, mem, spike)
+        return mem1, spike_out
 
     def forward(self, input, wins=15):
-        batch_size = input.size(0)
-        dev = input.device
-
-        mem = torch.zeros([batch_size, self.channel, 4], device=dev)
-        spike = torch.zeros([batch_size, self.channel, 4], device=dev)
-        spikes = torch.zeros([batch_size, wins, self.channel, 4], device=dev)
-
-        for step in range(wins):
-            x = input[:, step, ...]
-
-            # ---- Stage 1: 1 LIF from the raw input ----
-            in0 = self.fc_in(x)
-            mem0, spike0 = mem_update(in0, mem[:,:,0], spike[:,:,0])
-
-            # ---- Stage 2: 2 LIFs from spike0 ----
-            in_a = self.fc_a(spike0)
-            in_b = self.fc_b(spike0)
-            mem_a, spike_a = mem_update(in_a, mem[:,:,1], spike[:,:,1])
-            mem_b, spike_b = mem_update(in_b, mem[:,:,2], spike[:,:,2])
-
-            # ---- Stage 3: 1 LIF from (spike_a + spike_b) ----
-            spike_sum = spike_a + spike_b
-            in_c = self.fc_c(spike_sum)
-            mem_c, spike_c = mem_update(in_c, mem[:,:,3], spike[:,:,3])
-
-            mem = torch.stack([mem0, mem_a, mem_b, mem_c], dim=-1)
-            spike = torch.stack([spike0, spike_a, spike_b, spike_c], dim=-1)
-
-            spikes[:, step, ...] = spike
-
-        spikes = spikes.view(batch_size, wins, -1)
+        input = input.float().to(device)
+        if input.dim() == 2:
+            batch_size = input.size(0)
+            mem = torch.zeros([batch_size, self.channel, 4], device=device)
+            spike = torch.zeros([batch_size, self.channel, 4], device=device)
+            spikes = torch.zeros([batch_size, wins, self.channel, 4], device=device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, step, ...] = spike
+            spikes = spikes.view(batch_size, wins, -1)
+        else:
+            batch_size = input.size(1)
+            mem = torch.zeros([input.size(0), batch_size, self.channel, 4], device=device)
+            spike = torch.zeros([input.size(0), batch_size, self.channel, 4], device=device)
+            spikes = torch.zeros([input.size(0), batch_size, wins, self.channel, 4], device=device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, :, step, ...] = spike
+            spikes = spikes.view(input.size(0), batch_size, wins, -1)
         return spikes
 
 

@@ -56,7 +56,7 @@ class HH_neuron(nn.Module):
         self.gbar_L = 0.3
 
         coe_scaling = 1e-1
-        self.dt = 1e-1 * 2 * torch.rand(out_planes,requires_grad=False)
+        self.register_buffer('dt', 1e-1 * 2 * torch.rand(out_planes,requires_grad=False))
 
         learnable = False
         self.a_n_coe =  nn.Parameter(coe_scaling * torch.rand(out_planes), requires_grad=learnable)

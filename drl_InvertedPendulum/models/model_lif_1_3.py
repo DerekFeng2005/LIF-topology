@@ -41,53 +41,62 @@ def weights_init_(m):
 
 class LIF_1_3_neuron(nn.Module):
     """
-    1+3 LIF topology (alternative to LIF_HH's 3+1):
-        - Stage 1: 1 LIF processes the raw input (slot 0)
-        - Stage 2: 3 parallel LIFs each receive the stage-1 spike
-                    as their input current (slots 1, 2, 3)
+    1+3 LIF topology (mem-mixing, LIF_hh style).
 
-    Total: 4 LIFs, same as LIF_HH, but with a strict two-stage
-    information flow rather than 3-parallel + 1-residual.
+    Slot layout: [batch, channel, 4] (or [T, batch, channel, 4])
+        slot 0 -> 1 primary LIF (processes input)
+        slots 1, 2, 3 -> mixing LIFs, each receives a learned non-negative
+                          scalar of mem[:,:,0:1] via lif_fc = nn.Linear(1, 3)
     """
     def __init__(self, in_planes, out_planes):
         super(LIF_1_3_neuron, self).__init__()
+        self.fc1 = nn.Linear(in_planes, out_planes)
+        self.lif_fc = nn.Linear(1, 3)
+        self.lif_fc.weight.data = abs(self.lif_fc.weight.data)
         self.channel = out_planes
-        self.fc_in = nn.Linear(in_planes, out_planes)
-        self.fc_a = nn.Linear(out_planes, out_planes)
-        self.fc_b = nn.Linear(out_planes, out_planes)
-        self.fc_c = nn.Linear(out_planes, out_planes)
+        self.thresh = thresh
+        self.apply(weights_init_)
+
+    def update_neuron(self, input, mem, spike):
+        if input.dim() == 2:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, 0] = self.fc1(input)
+            inner = self.lif_fc(mem[:, :, 0:1])
+            input_all[:, :, 1] = inner[:, :, 0]
+            input_all[:, :, 2] = inner[:, :, 1]
+            input_all[:, :, 3] = inner[:, :, 2]
+        else:
+            input_all = torch.zeros_like(mem)
+            input_all[:, :, :, 0] = self.fc1(input)
+            inner = self.lif_fc(mem[:, :, :, 0:1])
+            input_all[:, :, :, 1] = inner[:, :, :, 0]
+            input_all[:, :, :, 2] = inner[:, :, :, 1]
+            input_all[:, :, :, 3] = inner[:, :, :, 2]
+        mem1 = torch.zeros_like(mem)
+        spike_out = torch.zeros_like(spike)
+        mem1, spike_out = mem_update(input_all, mem, spike)
+        return mem1, spike_out
 
     def forward(self, input, wins=15):
-        batch_size = input.size(0)
-        dev = input.device
-
-        # mem, spike: [batch, channel, 4]
-        mem = torch.zeros([batch_size, self.channel, 4], device=dev)
-        spike = torch.zeros([batch_size, self.channel, 4], device=dev)
-        spikes = torch.zeros([batch_size, wins, self.channel, 4], device=dev)
-
-        for step in range(wins):
-            x = input[:, step, ...]
-
-            # ---- Stage 1: 1 LIF from the raw input ----
-            in0 = self.fc_in(x)
-            mem0, spike0 = mem_update(in0, mem[:,:,0], spike[:,:,0])
-
-            # ---- Stage 2: 3 LIFs from the stage-1 spike ----
-            in_a = self.fc_a(spike0)
-            in_b = self.fc_b(spike0)
-            in_c = self.fc_c(spike0)
-            mem_a, spike_a = mem_update(in_a, mem[:,:,1], spike[:,:,1])
-            mem_b, spike_b = mem_update(in_b, mem[:,:,2], spike[:,:,2])
-            mem_c, spike_c = mem_update(in_c, mem[:,:,3], spike[:,:,3])
-
-            # Out-of-place stack to keep autograd happy
-            mem = torch.stack([mem0, mem_a, mem_b, mem_c], dim=-1)
-            spike = torch.stack([spike0, spike_a, spike_b, spike_c], dim=-1)
-
-            spikes[:, step, ...] = spike
-
-        spikes = spikes.view(batch_size, wins, -1)
+        input = input.float().to(device)
+        if input.dim() == 2:
+            batch_size = input.size(0)
+            mem = torch.zeros([batch_size, self.channel, 4], device=device)
+            spike = torch.zeros([batch_size, self.channel, 4], device=device)
+            spikes = torch.zeros([batch_size, wins, self.channel, 4], device=device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, step, ...] = spike
+            spikes = spikes.view(batch_size, wins, -1)
+        else:
+            batch_size = input.size(1)
+            mem = torch.zeros([input.size(0), batch_size, self.channel, 4], device=device)
+            spike = torch.zeros([input.size(0), batch_size, self.channel, 4], device=device)
+            spikes = torch.zeros([input.size(0), batch_size, wins, self.channel, 4], device=device)
+            for step in range(wins):
+                mem, spike = self.update_neuron(input, mem, spike)
+                spikes[:, :, step, ...] = spike
+            spikes = spikes.view(input.size(0), batch_size, wins, -1)
         return spikes
 
 
@@ -140,11 +149,10 @@ class GaussianPolicy(nn.Module):
         mean, log_std = self.forward(state)
         std = log_std.exp()
         normal = Normal(mean, std)
-        x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
+        x_t = normal.rsample()
         y_t = torch.tanh(x_t)
         action = y_t * self.action_scale + self.action_bias
         log_prob = normal.log_prob(x_t)
-        # Enforcing Action Bound
         log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
