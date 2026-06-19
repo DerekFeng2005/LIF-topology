@@ -49,7 +49,13 @@ class SAC(object):
             action, _, _ = self.policy.sample(state)
         else:
             _, _, action = self.policy.sample(state)
-        return action.detach().cpu().numpy()[0]
+        action_np = action.detach().cpu().numpy()
+        # Drop batch dim, then last wins step (4-LIF/5-LIF policies output [1, 15, num_actions])
+        if action_np.ndim == 3:
+            action_np = action_np[0, -1, :]
+        else:
+            action_np = action_np[0]
+        return action_np
 
     def update_parameters(self, memory, batch_size, updates):
         # Sample a batch from memory

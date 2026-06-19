@@ -50,7 +50,7 @@ parser.add_argument('--replay_size', type=int, default=1000000, metavar='N',
 parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
 parser.add_argument('--model_name', default="LIF_HH",
-                    help='choose model (choice: LIF, HH, LIF_HH, LIF_1_3, LIF_2_2, LIF_1_2_1, LIF_1_1_1_1, 4LIF, ANN)')
+                    help='choose model (choice: LIF, HH, LIF_HH, LIF_1_3, LIF_2_2, LIF_1_2_1, LIF_1_1_1_1, LIF_1_3_1, LIF_1_1_3, LIF_1_2_2, LIF_1_1_2_1, LIF_1_1_1_1_1, LIF_1_4, 4LIF, ANN)')
 args = parser.parse_args()
 
 # 兼容新旧 gym / gymnasium
@@ -89,13 +89,25 @@ def train(args):
     elif(args.model_name == "LIF_HH"):
         from models.model_lif_hh import GaussianPolicy
     elif(args.model_name == "LIF_1_3"):
-        from models.model_lif_1_3 import GaussianPolicy
+        from models.models_4LIF.model_lif_1_3 import GaussianPolicy
     elif(args.model_name == "LIF_2_2"):
-        from models.model_lif_2_2 import GaussianPolicy
+        from models.models_4LIF.model_lif_2_2 import GaussianPolicy
     elif(args.model_name == "LIF_1_2_1"):
-        from models.model_lif_1_2_1 import GaussianPolicy
+        from models.models_4LIF.model_lif_1_2_1 import GaussianPolicy
     elif(args.model_name == "LIF_1_1_1_1"):
-        from models.model_lif_1_1_1_1 import GaussianPolicy
+        from models.models_4LIF.model_lif_1_1_1_1 import GaussianPolicy
+    elif(args.model_name == "LIF_1_3_1"):
+        from models.models_5LIF.model_lif_1_3_1 import GaussianPolicy
+    elif(args.model_name == "LIF_1_1_3"):
+        from models.models_5LIF.model_lif_1_1_3 import GaussianPolicy
+    elif(args.model_name == "LIF_1_2_2"):
+        from models.models_5LIF.model_lif_1_2_2 import GaussianPolicy
+    elif(args.model_name == "LIF_1_1_2_1"):
+        from models.models_5LIF.model_lif_1_1_2_1 import GaussianPolicy
+    elif(args.model_name == "LIF_1_1_1_1_1"):
+        from models.models_5LIF.model_lif_1_1_1_1_1 import GaussianPolicy
+    elif(args.model_name == "LIF_1_4"):
+        from models.models_5LIF.model_lif_1_4 import GaussianPolicy
     elif(args.model_name == "4LIF"):
         from models.model_lif import GaussianPolicy
         args.hidden_size = 512
@@ -212,11 +224,22 @@ def train(args):
                 break
 
         if total_numsteps >= args.num_steps:
-            output_dir = "./record/{}".format(args.model_name)
+            # Route topologies into 4-LIF / 5-LIF subdirs
+            _4LIF = {"LIF_1_3", "LIF_2_2", "LIF_1_2_1", "LIF_1_1_1_1", "LIF_ring"}
+            _5LIF = {"LIF_1_3_1", "LIF_1_1_3", "LIF_1_2_2", "LIF_1_1_2_1", "LIF_1_1_1_1_1", "LIF_1_4"}
+            if args.model_name in _4LIF:
+                subdir = "4-LIF"
+            elif args.model_name in _5LIF:
+                subdir = "5-LIF"
+            else:
+                subdir = args.model_name
+            output_dir = "./record/{}".format(subdir)
             os.makedirs(output_dir, exist_ok=True)
-            np.save("{}/reward_iteration_{}.npy".format(output_dir, args.seed),
+            np.save("{}/reward_iteration_{}_seed{}.npy".format(
+                        output_dir, args.model_name, args.seed),
                     {"reward_dict":np.array(reward_dict_iteration),
-                    "iteration":np.array(total_numsteps)})
+                    "iteration":np.array(total_numsteps),
+                    "model_name":args.model_name})
             break
 
         print("Episode: {}, total numsteps: {}, episode steps: {}, reward: {}".format(i_episode, total_numsteps, episode_steps, round(episode_reward, 2)))

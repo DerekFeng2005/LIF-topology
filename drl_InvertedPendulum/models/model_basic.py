@@ -48,10 +48,10 @@ class QNetwork(nn.Module):
         self.apply(weights_init_)
 
     def forward(self, state, action):
-        if(state.size(1)==5):
-            state = state[:,-1,...]
-        if(action.size(1)==5):
-            action = action[:,-1,...]
+        if state.dim() == 3:
+            state = state[:, -1, ...]
+        if action.dim() == 3:
+            action = action[:, -1, ...]
         xu = torch.cat([state, action], 1)
         
         x1 = F.relu(self.linear1(xu))
