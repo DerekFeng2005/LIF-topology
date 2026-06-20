@@ -30,8 +30,8 @@ class Solver(object):
         self.model = args.model
 
         # Network & Optimizer
-        self.toynet = cuda(ToyNet(self.K,self.model), self.cuda)
-        self.toynet_ema = Weight_EMA_Update(cuda(ToyNet(self.K,self.model), self.cuda),\
+        self.toynet = cuda(ToyNet(self.K,self.model, topk=args.topk), self.cuda)
+        self.toynet_ema = Weight_EMA_Update(cuda(ToyNet(self.K,self.model, topk=args.topk), self.cuda),\
                 self.toynet.state_dict(), decay=0.999)
 
         self.optim = optim.Adam(self.toynet.parameters(),lr=self.lr,betas=(0.5,0.999))

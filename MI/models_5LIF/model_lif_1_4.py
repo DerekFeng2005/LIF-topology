@@ -36,6 +36,22 @@ def weights_init_(m):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
         torch.nn.init.constant_(m.bias, 0)
 
+def _topk_slot_select(spikes, topk):
+    """
+    Drop slots per sample by lowest total spike count, gather the rest.
+
+    spikes: [batch, wins, channel, num_slots]
+    Returns: [batch, wins, channel, topk]
+    """
+    if topk is None or topk >= spikes.size(-1):
+        return spikes
+    spike_counts = spikes.sum(dim=(1, 2))                # [batch, num_slots]
+    _, sorted_idx = torch.sort(spike_counts, dim=1, descending=True)
+    top_idx = sorted_idx[:, :topk]                       # [batch, topk]
+    batch_size, wins, channel, _ = spikes.size()
+    gather_idx = top_idx.view(batch_size, 1, 1, topk).expand(-1, wins, channel, -1)
+    return spikes.gather(3, gather_idx)
+
 class LIF_1_4_neuron(nn.Module):
     """
     1+4 LIF topology (mem-mixing, LIF_hh style, 5 LIF slots).
@@ -44,14 +60,19 @@ class LIF_1_4_neuron(nn.Module):
         slot 0     -> 1 primary LIF (processes input)
         slots 1-4  -> 4 mixing LIFs, each receives a learned non-negative
                       scalar of mem[:,:,0:1] via lif_fc = nn.Linear(1, 4)
+
+    Args:
+        topk: int or None. If < 5, dynamically drops the (5 - topk) slots
+              with the lowest total spike count per sample. None keeps all 5.
     """
-    def __init__(self, in_planes, out_planes):
+    def __init__(self, in_planes, out_planes, topk=5):
         super(LIF_1_4_neuron, self).__init__()
         self.fc1 = nn.Linear(in_planes, out_planes)
         self.lif_fc = nn.Linear(1, 4).to(device)
         self.lif_fc.weight.data = abs(self.lif_fc.weight.data)
         self.channel = out_planes
         self.thresh = thresh
+        self.topk = topk
         self.apply(weights_init_)
 
     def update_neuron(self, input, mem, spike):
@@ -86,7 +107,8 @@ class LIF_1_4_neuron(nn.Module):
             for step in range(wins):
                 mem, spike = self.update_neuron(input, mem, spike)
                 spikes[:, step, ...] = spike
-            spikes = spikes.view(batch_size, wins, -1)
+            spikes = _topk_slot_select(spikes, self.topk)
+            spikes = spikes.contiguous().view(batch_size, wins, -1)
         else:
             batch_size = input.size(1)
             mem = torch.zeros([input.size(0), batch_size, self.channel, 5]).to(device)

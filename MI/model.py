@@ -31,7 +31,7 @@ _5LIF_MODELS = ("LIF_1_3_1", "LIF_1_1_3", "LIF_1_2_2", "LIF_1_1_2_1", "LIF_1_1_1
 
 class ToyNet(nn.Module):
 
-    def __init__(self, K=256, model="LIF"):
+    def __init__(self, K=256, model="LIF", topk=5):
         super(ToyNet, self).__init__()
         self.K = K
         # Normalize so `--model LIF_hh` and `--model LIF_HH` both work.
@@ -53,17 +53,17 @@ class ToyNet(nn.Module):
         elif self.model == "LIF_RING":
             self.neuron = LIF_ring_neuron(1296,512)
         elif self.model == "LIF_1_3_1":
-            self.neuron = LIF_1_3_1_neuron(1296,512)
+            self.neuron = LIF_1_3_1_neuron(1296,512, topk=topk)
         elif self.model == "LIF_1_1_3":
-            self.neuron = LIF_1_1_3_neuron(1296,512)
+            self.neuron = LIF_1_1_3_neuron(1296,512, topk=topk)
         elif self.model == "LIF_1_2_2":
-            self.neuron = LIF_1_2_2_neuron(1296,512)
+            self.neuron = LIF_1_2_2_neuron(1296,512, topk=topk)
         elif self.model == "LIF_1_1_2_1":
-            self.neuron = LIF_1_1_2_1_neuron(1296,512)
+            self.neuron = LIF_1_1_2_1_neuron(1296,512, topk=topk)
         elif self.model == "LIF_1_1_1_1_1":
-            self.neuron = LIF_1_1_1_1_1_neuron(1296,512)
+            self.neuron = LIF_1_1_1_1_1_neuron(1296,512, topk=topk)
         elif self.model == "LIF_1_4":
-            self.neuron = LIF_1_4_neuron(1296,512)
+            self.neuron = LIF_1_4_neuron(1296,512, topk=topk)
         else:
             raise ValueError(
                 "Unknown model: {!r}. Choose from: LIF, HH, LIF_HH, "
@@ -80,9 +80,10 @@ class ToyNet(nn.Module):
                 self.neuron,
                 nn.Linear(512*4, 2*self.K))
         elif self.model in _5LIF_MODELS:
+            # `topk` controls how many slots are kept (5 = full, 4 = drop lowest).
             self.encode = nn.Sequential(
                 self.neuron,
-                nn.Linear(512*5, 2*self.K))
+                nn.Linear(512*topk, 2*self.K))
         else:
             raise ValueError("Unknown model: {!r}".format(self.model))
         

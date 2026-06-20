@@ -50,6 +50,7 @@ if __name__ == "__main__":
     parser.add_argument('--mode',default='train', type=str, help='train or test')
     parser.add_argument('--tensorboard',default=False, type=str2bool, help='enable tensorboard')
     parser.add_argument('--model',default="LIF", type=str, help='LIF / HH / LIF_HH / LIF_1_3 / LIF_2_2 / LIF_1_2_1 / LIF_1_1_1_1 / LIF_ring / LIF_1_3_1 / LIF_1_1_3 / LIF_1_2_2 / LIF_1_1_2_1 / LIF_1_1_1_1_1 / LIF_1_4')
+    parser.add_argument('--topk', default=5, type=int, help='top-k slots to keep for 5-LIF models (default 5 = all slots; 4 = drop the slot with the lowest total spike count per sample)')
     args = parser.parse_args()
 
     IZX_dict = []
