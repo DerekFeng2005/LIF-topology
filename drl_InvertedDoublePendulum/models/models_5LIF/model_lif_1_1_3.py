@@ -34,6 +34,17 @@ def mem_update(x, mem, spike):
     spike1 = act_fun(mem1)
     return mem1, spike1
 
+def _topk_slot_select(spikes, topk):
+    """spikes: [batch, wins, channel, 5]. Return topk slots by total spike count per sample."""
+    if topk is None or topk >= spikes.size(-1):
+        return spikes
+    spike_counts = spikes.sum(dim=(1, 2))  # [batch, 5]
+    sorted_idx = torch.argsort(spike_counts, dim=1, descending=True)
+    top_idx = sorted_idx[:, :topk]  # [batch, topk]
+    batch_size, wins, channel, _ = spikes.size()
+    gather_idx = top_idx.view(batch_size, 1, 1, topk).expand(-1, wins, channel, -1)
+    return spikes.gather(3, gather_idx)
+
 def weights_init_(m):
     if isinstance(m, nn.Linear):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
@@ -50,7 +61,7 @@ class LIF_1_1_3_neuron(nn.Module):
         slots 2, 3, 4   -> 3 stage-3 mixing LIFs, see OLD mem[:,:,1] via
                            lif_fc2 = nn.Linear(1, 3) (non-negative)
     """
-    def __init__(self, in_planes, out_planes):
+    def __init__(self, in_planes, out_planes, topk=5):
         super(LIF_1_1_3_neuron, self).__init__()
         self.fc1 = nn.Linear(in_planes, out_planes)
         self.lif_fc1 = nn.Linear(1, 1)
@@ -58,6 +69,7 @@ class LIF_1_1_3_neuron(nn.Module):
         self.lif_fc2 = nn.Linear(1, 3)
         self.lif_fc2.weight.data = abs(self.lif_fc2.weight.data)
         self.channel = out_planes
+        self.topk = topk
         self.thresh = thresh
         self.apply(weights_init_)
 
@@ -84,19 +96,20 @@ class LIF_1_1_3_neuron(nn.Module):
         for step in range(wins):
             mem, spike = self.update_neuron(input[:, step, ...], mem, spike)
             spikes[:, step, ...] = spike
+        spikes = _topk_slot_select(spikes, self.topk)
         spikes = spikes.view(batch_size, wins, -1)
         return spikes
 
 
 class GaussianPolicy(nn.Module):
-    def __init__(self, num_inputs, num_actions, hidden_dim, action_space=None):
+    def __init__(self, num_inputs, num_actions, hidden_dim, action_space=None, topk=5):
         super(GaussianPolicy, self).__init__()
 
-        self.lif_1_1_3_layer1 = LIF_1_1_3_neuron(num_inputs, hidden_dim)
-        self.lif_1_1_3_layer2 = LIF_1_1_3_neuron(5*hidden_dim, hidden_dim)
-        self.linear1_1 = nn.Linear(5*hidden_dim, hidden_dim)
+        self.lif_1_1_3_layer1 = LIF_1_1_3_neuron(num_inputs, hidden_dim, topk=topk)
+        self.lif_1_1_3_layer2 = LIF_1_1_3_neuron(topk*hidden_dim, hidden_dim, topk=topk)
+        self.linear1_1 = nn.Linear(topk*hidden_dim, hidden_dim)
         self.linear1_2 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear2_1 = nn.Linear(5*hidden_dim, hidden_dim)
+        self.linear2_1 = nn.Linear(topk*hidden_dim, hidden_dim)
         self.linear2_2 = nn.Linear(hidden_dim, hidden_dim)
 
         self.mean_linear = nn.Linear(hidden_dim, num_actions)

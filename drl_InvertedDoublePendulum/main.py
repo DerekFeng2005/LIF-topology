@@ -47,6 +47,7 @@ parser.add_argument('--cuda', action="store_true",
                     help='run on CUDA (default: False)')
 parser.add_argument('--model_name', default="LIF_HH",
                     help='choose model (choice: LIF, HH, LIF_HH, LIF_1_3, LIF_2_2, LIF_1_2_1, LIF_1_1_1_1, LIF_ring, LIF_1_3_1, LIF_1_1_3, LIF_1_2_2, LIF_1_1_2_1, LIF_1_1_1_1_1, LIF_1_4, 4LIF, ANN)')
+parser.add_argument('--topk', default=5, type=int, help='top-k slots to keep for 5-LIF models (default 5 = all slots; 4 = drop the slot with the lowest total spike count per sample)')
 args = parser.parse_args()
 
 def train(args):
@@ -252,7 +253,7 @@ def train(args):
             if args.model_name in _4LIF:
                 subdir = "4-LIF"
             elif args.model_name in _5LIF:
-                subdir = "5-LIF"
+                subdir = "5-LIF" if args.topk >= 5 else "5-LIF-dropout"
             else:
                 subdir = args.model_name
             output_dir = "./record/{}".format(subdir)
