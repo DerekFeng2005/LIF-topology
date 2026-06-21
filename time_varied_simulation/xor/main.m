@@ -145,11 +145,16 @@ function main()%xor
     end
     save("data.mat",'output1','output2')
     t_current=dt*2000:dt*1000:t*1000;
-    plot(t_current,output1);
+    
+    % ================= 修改部分开始 =================
+    % 1. 画 hh (output1)：设置为蓝色实线，并稍微加粗
+    plot(t_current, output1, 'b-', 'LineWidth', 2);
     xlabel('time (ms)');
     ylabel('membrane(mV)');
     hold on;
-    plot(t_current,output2);
+    % 2. 画 lif-hh (output2)：设置为橙色虚线
+    plot(t_current, output2, 'color', [1 0.5 0], 'LineStyle', '--', 'LineWidth', 1.5);
     legend("hh","lif-hh")
     set(gca, 'xticklabel', get(gca, 'xtick'), 'yticklabel', get(gca, 'ytick'));
+    % ================= 修改部分结束 =================
 end

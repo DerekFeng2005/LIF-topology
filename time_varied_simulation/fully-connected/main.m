@@ -95,13 +95,19 @@ function main()%fc
         lif2_4(:,i)=lif_model_multiple(C./gs,lif2_4(:,i-1),U4_rest,-(f4+f5+f6)+(gna.*lif2_1(:,i-1)+gk.*lif2_2(:,i-1)+gl.*lif2_3(:,i-1))./gs);
         output2(:,i-1)=(f4+f5+f6+lif2_4(:,i-1)>thresh);
     end
+    
     save("data.mat",'output1','output2')
     t_current=dt*2000:dt*1000:t*1000;
+    
+    % ================= 修改部分开始 =================
     for i=1:cfg_fc(2)
         subplot(cfg_fc(2),1,i)
-        plot(t_current,output1(i,:));
+        % 1. 画 hh (output1)：设置为蓝色实线，并稍微加粗
+        plot(t_current, output1(i,:), 'b-', 'LineWidth', 2); 
         hold on;
-        plot(t_current,output2(i,:));
+        % 2. 画 lif-hh (output2)：设置为橙色虚线
+        plot(t_current, output2(i,:), 'color', [1 0.5 0], 'LineStyle', '--', 'LineWidth', 1.5); 
+        
         if(i==1)
             legend("hh","lif-hh")
         end
@@ -118,4 +124,5 @@ function main()%fc
             set(gca, 'xticklabel', get(gca, 'xtick'));
         end
     end
+    % ================= 修改部分结束 =================
 end
